@@ -38,16 +38,32 @@
   transform: translate3d(0, var(--initial-transform, 100%), 0);
 }
 
+[data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='bottom'][data-state='open'] {
+  animation-name: slideFromBottomToSnapPoint;
+}
+
 [data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='top'] {
   transform: translate3d(0, calc(var(--initial-transform, 100%) * -1), 0);
+}
+
+[data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='top'][data-state='open'] {
+  animation-name: slideFromTopToSnapPoint;
 }
 
 [data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='left'] {
   transform: translate3d(calc(var(--initial-transform, 100%) * -1), 0, 0);
 }
 
+[data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='left'][data-state='open'] {
+  animation-name: slideFromLeftToSnapPoint;
+}
+
 [data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='right'] {
   transform: translate3d(var(--initial-transform, 100%), 0, 0);
+}
+
+[data-vaul-drawer][data-vaul-snap-points='true'][data-vaul-drawer-direction='right'][data-state='open'] {
+  animation-name: slideFromRightToSnapPoint;
 }
 
 [data-vaul-drawer][data-vaul-delayed-snap-points='true'][data-vaul-drawer-direction='top'] {
@@ -252,5 +268,41 @@
 @keyframes slideToRight {
   to {
     transform: translate3d(var(--initial-transform, 100%), 0, 0);
+  }
+}
+
+@keyframes slideFromBottomToSnapPoint {
+  from {
+    transform: translate3d(0, var(--initial-transform, 100%), 0);
+  }
+  to {
+    transform: translate3d(0, var(--snap-point-height, 0), 0);
+  }
+}
+
+@keyframes slideFromTopToSnapPoint {
+  from {
+    transform: translate3d(0, calc(var(--initial-transform, 100%) * -1), 0);
+  }
+  to {
+    transform: translate3d(0, var(--snap-point-height, 0), 0);
+  }
+}
+
+@keyframes slideFromLeftToSnapPoint {
+  from {
+    transform: translate3d(calc(var(--initial-transform, 100%) * -1), 0, 0);
+  }
+  to {
+    transform: translate3d(var(--snap-point-height, 0), 0, 0);
+  }
+}
+
+@keyframes slideFromRightToSnapPoint {
+  from {
+    transform: translate3d(var(--initial-transform, 100%), 0, 0);
+  }
+  to {
+    transform: translate3d(var(--snap-point-height, 0), 0, 0);
   }
 }
