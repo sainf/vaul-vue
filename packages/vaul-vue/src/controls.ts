@@ -2,7 +2,7 @@ import { computed, onUnmounted, ref, watch, watchEffect } from 'vue'
 import type { ComponentPublicInstance, Ref } from 'vue'
 import { isClient } from '@vueuse/core'
 import { dampenValue, getTranslate, isVertical, reset, set } from './helpers'
-import { BORDER_RADIUS, DRAG_CLASS, NESTED_DISPLACEMENT, TRANSITIONS, VELOCITY_THRESHOLD, WINDOW_TOP_OFFSET } from './constants'
+import { BORDER_RADIUS, DRAG_CLASS, NESTED_DISPLACEMENT, NESTED_DISPLACEMENT_SCALE, TRANSITIONS, VELOCITY_THRESHOLD, WINDOW_TOP_OFFSET } from './constants'
 import { useSnapPoints } from './useSnapPoints'
 import { usePositionFixed } from './usePositionFixed'
 import type { DrawerRootContext } from './context'
@@ -18,7 +18,7 @@ export interface WithoutFadeFromProps {
   /**
    * Index of a `snapPoint` from which the overlay fade should be applied. Defaults to the last snap point.
    */
-  fadeFromIndex?: never
+  fadeFromIndex: never
 }
 
 export type DrawerRootProps = {
@@ -193,6 +193,10 @@ export function useDrawer(props: UseDrawerProps & DialogEmitHandlers): DrawerRoo
   const initialDrawerHeight = ref(0)
   const drawerHeightRef = computed(() => drawerRef.value?.$el.getBoundingClientRect().height || 0)
 
+  const directionMultiplierComputed = computed(() => direction.value === 'bottom' || direction.value === 'right' ? 1 : -1)
+  const verticalComputed = computed(() => isVertical(direction.value))
+  const nestedDisplacement = computed(() => NESTED_DISPLACEMENT * directionMultiplierComputed.value)
+
   const snapPoints = usePropOrDefaultRef(
     props.snapPoints,
     ref<(number | string)[] | undefined>(undefined),
@@ -340,10 +344,10 @@ export function useDrawer(props: UseDrawerProps & DialogEmitHandlers): DrawerRoo
       const isDraggingInDirection = draggedDistance > 0
 
       // Pre condition for disallowing dragging in the close direction.
-      const noCloseSnapPointsPreCondition = snapPoints.value && !dismissible.value && !isDraggingInDirection
+      const noCloseSnapPointsPreCondition = snapPoints.value && !dismissible.value && !isDraggingInDirection && activeSnapPointIndex.value === 0
 
       // Disallow dragging down to close when first snap point is the active one and dismissible prop is set to false.
-      if (noCloseSnapPointsPreCondition && activeSnapPointIndex.value === 0)
+      if (noCloseSnapPointsPreCondition)
         return
 
       // We need to capture last time when drag with scroll was triggered and have a timeout between
@@ -512,10 +516,12 @@ export function useDrawer(props: UseDrawerProps & DialogEmitHandlers): DrawerRoo
   })
 
   watch(open, () => {
-    // reflect controlled `open` state
-    isOpen.value = open.value
-    if (!open.value) {
-      closeDrawer()
+    // reflect controlled `open` state, only if different to avoid double emission
+    if (open.value !== isOpen.value) {
+      isOpen.value = open.value
+      if (!open.value) {
+        closeDrawer()
+      }
     }
   })
 
@@ -597,25 +603,28 @@ export function useDrawer(props: UseDrawerProps & DialogEmitHandlers): DrawerRoo
   }, { immediate: true })
 
   function onNestedOpenChange(o: boolean) {
-    const scale = o ? (window.innerWidth - NESTED_DISPLACEMENT) / window.innerWidth : 1
-    const y = o ? -NESTED_DISPLACEMENT : 0
+    const dim = verticalComputed.value ? window.innerHeight : window.innerWidth
+    const scale = o ? (dim - NESTED_DISPLACEMENT_SCALE) / dim : 1
+    const translate = o ? -1 * nestedDisplacement.value : 0
 
     if (nestedOpenChangeTimer.value)
       window.clearTimeout(nestedOpenChangeTimer.value)
 
     set(drawerRef.value?.$el, {
       transition: `transform ${TRANSITIONS.DURATION}s cubic-bezier(${TRANSITIONS.EASE.join(',')})`,
-      transform: `scale(${scale}) translate3d(0, ${y}px, 0)`,
+      transform: verticalComputed.value
+        ? `scale(${scale}) translate3d(0, ${translate}px, 0)`
+        : `scale(${scale}) translate3d(${translate}px, 0, 0)`,
     })
 
     if (!o && drawerRef.value?.$el) {
       nestedOpenChangeTimer.value = window.setTimeout(() => {
-        const translateValue = getTranslate(drawerRef.value?.$el, direction.value)
+        const translate = getTranslate(drawerRef.value?.$el, direction.value)
         set(drawerRef.value?.$el, {
           transition: 'none',
-          transform: isVertical(direction.value)
-            ? `translate3d(0, ${translateValue}px, 0)`
-            : `translate3d(${translateValue}px, 0, 0)`,
+          transform: verticalComputed.value
+            ? `translate3d(0, ${translate}px, 0)`
+            : `translate3d(${translate}px, 0, 0)`,
         })
       }, 500)
     }
@@ -625,13 +634,14 @@ export function useDrawer(props: UseDrawerProps & DialogEmitHandlers): DrawerRoo
     if (percentageDragged < 0)
       return
 
-    const initialDim = isVertical(direction.value) ? window.innerHeight : window.innerWidth
-    const initialScale = (initialDim - NESTED_DISPLACEMENT) / initialDim
+    const initialDim = verticalComputed.value ? window.innerHeight : window.innerWidth
+    const initialScale = (initialDim - NESTED_DISPLACEMENT_SCALE) / initialDim
     const newScale = initialScale + percentageDragged * (1 - initialScale)
-    const newTranslate = -NESTED_DISPLACEMENT + percentageDragged * NESTED_DISPLACEMENT
+    const displacement = nestedDisplacement.value
+    const newTranslate = -1 * displacement + percentageDragged * displacement
 
     set(drawerRef.value?.$el, {
-      transform: isVertical(direction.value)
+      transform: verticalComputed.value
         ? `scale(${newScale}) translate3d(0, ${newTranslate}px, 0)`
         : `scale(${newScale}) translate3d(${newTranslate}px, 0, 0)`,
       transition: 'none',
@@ -639,14 +649,14 @@ export function useDrawer(props: UseDrawerProps & DialogEmitHandlers): DrawerRoo
   }
 
   function onNestedRelease(o: boolean) {
-    const dim = isVertical(direction.value) ? window.innerHeight : window.innerWidth
-    const scale = o ? (dim - NESTED_DISPLACEMENT) / dim : 1
-    const translate = o ? -NESTED_DISPLACEMENT : 0
+    const dim = verticalComputed.value ? window.innerHeight : window.innerWidth
+    const scale = o ? (dim - NESTED_DISPLACEMENT_SCALE) / dim : 1
+    const translate = o ? -1 * nestedDisplacement.value : 0
 
     if (o) {
       set(drawerRef.value?.$el, {
         transition: `transform ${TRANSITIONS.DURATION}s cubic-bezier(${TRANSITIONS.EASE.join(',')})`,
-        transform: isVertical(direction.value)
+        transform: verticalComputed.value
           ? `scale(${scale}) translate3d(0, ${translate}px, 0)`
           : `scale(${scale}) translate3d(${translate}px, 0, 0)`,
       })
